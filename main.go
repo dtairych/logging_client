@@ -4,16 +4,27 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"runtime"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type LogEntry struct {
-	Service   string    `json:"service"`
-	Timestamp time.Time `json:"timestamp"`
-	Level     string    `json:"level"`
-	Message   string    `json:"message"`
+	Type      string            `json:"type"`
+	Service   string            `json:"service"`
+	Timestamp time.Time         `json:"timestamp"`
+	Level     string            `json:"level,omitempty"`
+	Message   string            `json:"message,omitempty"`
+	File      string            `json:"file,omitempty"`
+	Line      int               `json:"line,omitempty"`
+	User      string            `json:"user,omitempty"`
+	IP        string            `json:"ip,omitempty"`
+	Resource  string            `json:"resource,omitempty"`
+	Action    string            `json:"action,omitempty"`
+	Status    string            `json:"status,omitempty"`
+	Headers   map[string]string `json:"headers,omitempty"`
+	Payload   string            `json:"payload,omitempty"`
 }
 
 type Logger struct {
@@ -48,7 +59,7 @@ func NewLogger(service string) *Logger {
 		nil,    // arguments
 	)
 	if err != nil {
-		log.Fatal("Failed to declare a queue:", err)
+		log.Fatal("Failed to declare a logs queue:", err)
 	}
 
 	return &Logger{
@@ -59,14 +70,55 @@ func NewLogger(service string) *Logger {
 	}
 }
 
-func (logger *Logger) Log(level, message string) {
+func (logger *Logger) LogSystem(level, message string) {
+	_, file, line, ok := runtime.Caller(1)
+	if !ok {
+		file = "unknown"
+		line = 0
+	}
+
 	logEntry := LogEntry{
+		Type:      "system",
 		Service:   logger.service,
 		Timestamp: time.Now(),
 		Level:     level,
 		Message:   message,
+		File:      file,
+		Line:      line,
 	}
 
+	logger.publish(logEntry)
+}
+
+func (logger *Logger) LogUser(user, ip, resource, action, status string) {
+	logEntry := LogEntry{
+		Type:      "user",
+		Service:   logger.service,
+		Timestamp: time.Now(),
+		User:      user,
+		IP:        ip,
+		Resource:  resource,
+		Action:    action,
+		Status:    status,
+	}
+
+	logger.publish(logEntry)
+}
+
+func (logger *Logger) LogAPI(logType, ip, payload string, headers map[string]string) {
+	logEntry := LogEntry{
+		Type:      "api",
+		Service:   logger.service,
+		Timestamp: time.Now(),
+		IP:        ip,
+		Headers:   headers,
+		Payload:   payload,
+	}
+
+	logger.publish(logEntry)
+}
+
+func (logger *Logger) publish(logEntry LogEntry) {
 	logEntryBytes, err := json.Marshal(logEntry)
 	if err != nil {
 		log.Printf("Error marshalling log entry: %v", err)

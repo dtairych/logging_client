@@ -18,6 +18,7 @@ type LogEntry struct {
 	Message   string            `json:"message,omitempty"`
 	File      string            `json:"file,omitempty"`
 	Line      int               `json:"line,omitempty"`
+	Function  string            `json:"function,omitempty"`
 	User      string            `json:"user,omitempty"`
 	IP        string            `json:"ip,omitempty"`
 	Resource  string            `json:"resource,omitempty"`
@@ -71,10 +72,12 @@ func NewLogger(service string) *Logger {
 }
 
 func (logger *Logger) LogSystem(level, message string) {
-	_, file, line, ok := runtime.Caller(1)
+	pc, file, line, ok := runtime.Caller(1)
+	function := runtime.FuncForPC(pc).Name()
 	if !ok {
 		file = "unknown"
 		line = 0
+		function = "unknown"
 	}
 
 	logEntry := LogEntry{
@@ -85,6 +88,7 @@ func (logger *Logger) LogSystem(level, message string) {
 		Message:   message,
 		File:      file,
 		Line:      line,
+		Function:  function,
 	}
 
 	logger.publish(logEntry)
